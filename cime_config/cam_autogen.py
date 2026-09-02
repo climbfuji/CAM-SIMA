@@ -47,6 +47,12 @@ sys.path.append(_REG_GEN_DIR)
 from generate_registry_data import gen_registry
 from write_init_files import write_init_files
 
+# Framework Fortran modules that CAM-SIMA's host code compiles against in
+# every configuration, independent of the suites being built.  See
+# cime_config/host_framework_deps.py for the rationale and the list.
+from host_framework_deps import check_host_framework_deps
+from host_framework_deps import HostFrameworkDepsError
+
 ###############################################################################
 
 class CamAutoGenError(ValueError):
@@ -756,6 +762,16 @@ def generate_physics_suites(build_cache, preproc_defs, host_name,
         request = DatatableReport("utility_files")
         ufiles_str = datatable_report(cap_output_file, request, ";")
         utility_files = ufiles_str.split(';')
+        # CAM-SIMA host code USEs framework modules that capgen cannot see --
+        # cam_comp.F90 and friends are compiled in every configuration, not
+        # just when a suite touches constituent state.  Confirm the framework
+        # shipped them before the build gets as far as an opaque "Cannot open
+        # module file".  See cime_config/host_framework_deps.py.
+        try:
+            check_host_framework_deps(utility_files)
+        except HostFrameworkDepsError as derr:
+            raise CamAutoGenError(str(derr)) from derr
+        # end try
         _update_genccpp_dir(utility_files, genccpp_dir)
         request = DatatableReport("dependencies")
         dep_str = datatable_report(cap_output_file, request, ";")
