@@ -77,6 +77,17 @@ the import entirely in favour of CLI invocation.
 | `metadata_table.py` | `parse_metadata_file`, `find_scheme_names`, `MetadataTable` (with monkey-patches — see below) |
 | `fortran_tools.py` | `FortranWriter` |
 | `var_props.py` | `is_horizontal_dimension`, `is_vertical_dimension`, the two dim-name lists |
+| `ddt_library.py` | `VarDDT` — a placeholder that is never instantiated (added 2026-09-01) |
+
+`ddt_library.py` is the one shim that does **not** re-export a capgen
+symbol, because capgen has no counterpart: it flattens DDT instances into
+the host dictionary at parse time, so a DDT component is an ordinary leaf
+and nothing is ever a `VarDDT`.  It exists only so the `isinstance` half
+of `write_init_files.py`'s whole-DDT guard evaluates rather than raising
+`NameError`; the other half is `_VarWrapper.is_ddt()`.  It arrived with an
+upstream `development` merge that added the guard — a reminder that this
+layer's surface grows whenever upstream moves, which is the argument for
+retiring it on a schedule rather than opportunistically.
 
 ### CapDatabase adapter (~850 LOC)
 

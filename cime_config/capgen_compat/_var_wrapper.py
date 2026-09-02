@@ -100,6 +100,8 @@ class _VarWrapper:
         # ``'index_of_potential_temperature'``).  Driven from
         # ``HostVarEntry.local_subscript``; empty for bare host vars.
         '_local_subscript',
+        # Fortran type string, read only by :meth:`is_ddt`.
+        '_var_type',
     )
 
     def __init__(
@@ -115,6 +117,7 @@ class _VarWrapper:
         call_expr: Optional[str],
         intrinsic_subnames: Optional[List[str]],
         local_subscript: Optional[List[str]] = None,
+        var_type: Optional[str] = None,
     ):
         self._standard_name      = standard_name
         self._local_name         = local_name
@@ -127,6 +130,9 @@ class _VarWrapper:
         self._call_expr          = call_expr
         self._intrinsic_subnames = intrinsic_subnames
         self._local_subscript    = list(local_subscript or [])
+        # Fortran type string, used only by is_ddt().  None when the
+        # wrapper was built from a source that carries no type.
+        self._var_type           = var_type
         # ``_inner`` defaults to self -- factories that need a
         # distinct inner-wrapper layer reassign it.
         self._inner              = self
@@ -237,6 +243,7 @@ class _VarWrapper:
             call_expr          = entry.access_path,
             intrinsic_subnames = intrinsic_subnames,
             local_subscript    = local_subscript,
+            var_type           = entry.type,
         )
         # Pre-build the inner ``.var`` wrapper that reports the root
         # symbol as local_name.  If leaf == root (no DDT walk), reuse
@@ -256,6 +263,7 @@ class _VarWrapper:
                 call_expr          = entry.access_path,
                 intrinsic_subnames = intrinsic_subnames,
                 local_subscript    = local_subscript,
+                var_type           = entry.type,
             )
             wrapper._inner._inner = wrapper._inner
         return wrapper
@@ -328,6 +336,7 @@ class _VarWrapper:
             source             = source,
             call_expr          = arg.call_expr,
             intrinsic_subnames = None,
+            var_type           = getattr(arg.host_entry, 'type', None),
         )
 
     # ------------------------------------------------------------------
@@ -359,6 +368,27 @@ class _VarWrapper:
                 )
             )
         return getattr(self, attr)
+
+    def is_ddt(self) -> bool:
+        """Is this variable of derived-data type?
+
+        capgen flattens DDT instances into the host dictionary, so a DDT
+        *component* arrives as a plain leaf with an intrinsic type and
+        reports False here; only the DDT instance itself keeps its DDT
+        type.  That is what ``write_init_files`` wants: whole-DDT host
+        variables are initialised by the host at run time and cannot be
+        read from an initial-conditions file.  See
+        ``capgen_compat/ddt_library.py`` for the other half of that test.
+
+        ``external:<module>:<typename>`` is not special-cased: original
+        capgen has no such syntax and CAM-SIMA's registry declares no
+        external types.
+        """
+        if not self._var_type:
+            return False
+        from metadata.parse_tools import check_fortran_intrinsic
+        return check_fortran_intrinsic(
+            self._var_type.strip(), error=False) is None
 
     @property
     def source(self) -> _Source:
